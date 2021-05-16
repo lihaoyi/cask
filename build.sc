@@ -1,6 +1,5 @@
 import mill._, scalalib._, scalajslib._, publish._
 
-import $file.ci.upload, $file.ci.version
 import $file.example.compress.build
 import $file.example.compress2.build
 import $file.example.compress3.build
@@ -25,6 +24,8 @@ import $file.example.websockets.build
 import $file.example.websockets2.build
 import $file.example.websockets3.build
 import $file.example.websockets4.build
+import $ivy.`de.tototec::de.tobiasroeser.mill.vcs.version_mill0.9:0.1.1`
+import de.tobiasroeser.mill.vcs.version.VcsVersion
 
 val scala213 = "2.13.5"
 val scala3 = "3.0.0"
@@ -33,7 +34,7 @@ val dottyCustomVersion = Option(sys.props("dottyVersion"))
 trait CaskModule extends CrossScalaModule with PublishModule{
   def isDotty = crossScalaVersion.startsWith("3")
 
-  def publishVersion = build.publishVersion()._2
+  def publishVersion = VcsVersion.vcsState().format()
 
   def pomSettings = PomSettings(
     description = artifactName(),
@@ -190,76 +191,3 @@ object example extends Module{
   object websockets4 extends Cross[Websockets4Module](allVersions: _*)
 
 }
-
-def publishVersion = T.input($file.ci.version.publishVersion)
-def gitHead = T.input($file.ci.version.gitHead)
-
-def uploadToGithub(authKey: String) = T.command{
-  val (releaseTag, label) = publishVersion()
-
-  if (releaseTag == label){
-    requests.post(
-      "https://api.github.com/repos/lihaoyi/cask/releases",
-      data = ujson.write(
-        ujson.Obj(
-          "tag_name" -> releaseTag,
-          "name" -> releaseTag
-        )
-      ),
-      headers = Seq("Authorization" -> s"token $authKey")
-    )
-  }
-
-  val examples = Seq(
-    $file.example.compress.build.millSourcePath,
-    $file.example.compress2.build.millSourcePath,
-    $file.example.compress3.build.millSourcePath,
-    $file.example.cookies.build.millSourcePath,
-    $file.example.decorated.build.millSourcePath,
-    $file.example.decorated2.build.millSourcePath,
-    $file.example.endpoints.build.millSourcePath,
-    $file.example.formJsonPost.build.millSourcePath,
-    $file.example.httpMethods.build.millSourcePath,
-    $file.example.minimalApplication.build.millSourcePath,
-    $file.example.minimalApplication2.build.millSourcePath,
-    $file.example.redirectAbort.build.millSourcePath,
-    $file.example.scalatags.build.millSourcePath,
-    $file.example.staticFiles.build.millSourcePath,
-    $file.example.staticFiles2.build.millSourcePath,
-    $file.example.todo.build.millSourcePath,
-    $file.example.todoApi.build.millSourcePath,
-    $file.example.todoDb.build.millSourcePath,
-    $file.example.twirl.build.millSourcePath,
-    $file.example.variableRoutes.build.millSourcePath,
-    $file.example.websockets.build.millSourcePath,
-    $file.example.websockets2.build.millSourcePath,
-    $file.example.websockets3.build.millSourcePath,
-    $file.example.websockets4.build.millSourcePath,
-  )
-  for(example <- examples){
-    val f = T.ctx().dest
-    val last = example.last + "-" + label
-    os.copy(example, f / last)
-    os.write.over(
-      f / last / "mill",
-      os.read(os.pwd / "mill")
-    )
-    os.proc("chmod", "+x", f/last/"mill").call(f/last)
-    os.write.over(
-      f / last / "build.sc",
-      os.read(f / last / "build.sc")
-        .replaceFirst(
-          "trait AppModule extends CrossScalaModule\\s*\\{",
-          "object app extends ScalaModule \\{\n  def scalaVersion = \"2.13.5\"")
-        .replaceFirst(
-          "def ivyDeps = Agg\\[Dep\\]\\(",
-          "def ivyDeps = Agg(\n    ivy\"com.lihaoyi::cask:" + releaseTag + "\","
-        )
-    )
-
-    os.remove.all(f / "out.zip")
-    os.proc("zip", "-r", f / "out.zip", last).call(f)
-    upload.apply(f / "out.zip", releaseTag, last + ".zip", authKey)
-  }
-}
-

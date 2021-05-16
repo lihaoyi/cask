@@ -198,13 +198,4 @@ def main(publish: Boolean = false) = {
       )
     )
   }
-
-  if (publish){
-    implicit val wd = cwd/'target
-    %git 'init
-    %git('add, "-A", ".")
-    %git('commit, "-am", "first commit")
-    %git('remote, 'add, 'origin, "git@github.com:lihaoyi/cask.git")
-    %git('push, "-uf", 'origin, "master:gh-pages")
-  }
 }
