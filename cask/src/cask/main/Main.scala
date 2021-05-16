@@ -1,7 +1,5 @@
 package cask.main
 
-import java.util.concurrent.Executors
-
 import cask.endpoints.{WebsocketResult, WsHandler}
 import cask.model._
 import cask.internal.{DispatchTrie, Util}
