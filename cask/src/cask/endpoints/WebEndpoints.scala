@@ -44,6 +44,9 @@ class delete(val path: String, override val subpath: Boolean = false) extends We
   val methods = Seq("delete")
 }
 class route(val path: String, val methods: Seq[String], override val subpath: Boolean = false) extends WebEndpoint
+class options(val path: String, override val subpath: Boolean = false) extends WebEndpoint{
+  val methods = Seq("options")
+}
 
 abstract class QueryParamReader[T]
   extends ArgReader[Seq[String], T, cask.model.Request]{

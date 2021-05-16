@@ -16,5 +16,11 @@ object HttpMethods extends cask.MainRoutes{
     "security_by_obscurity"
   }
 
+  @cask.route("/api", methods = Seq("options"))
+  def cors(request: cask.Request) = {
+    "allow_cors"
+  }
+
+
   initialize()
 }

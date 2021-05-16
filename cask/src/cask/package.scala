@@ -35,6 +35,7 @@ package object cask {
   type postJson = endpoints.postJson
   type getJson = endpoints.getJson
   type postForm = endpoints.postForm
+  type options = endpoints.options
 
   // main
   type MainRoutes = main.MainRoutes
