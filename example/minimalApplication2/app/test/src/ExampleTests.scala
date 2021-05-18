@@ -27,7 +27,7 @@ object ExampleTests extends TestSuite{
 
       requests.post(s"$host/do-thing", data = "hello").text() ==> "olleh"
 
-      requests.get(s"$host/do-thing", check = false).statusCode ==> 404
+      requests.delete(s"$host/do-thing", check = false).statusCode ==> 405
     }
   }
 }

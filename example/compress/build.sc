@@ -7,7 +7,7 @@ trait AppModule extends CrossScalaModule{
   def ivyDeps = Agg[Dep](
   )
   object test extends Tests{
-    def testFrameworks = Seq("utest.runner.Framework")
+    def testFramework = "utest.runner.Framework"
 
     def ivyDeps = Agg(
       ivy"com.lihaoyi::utest::0.7.10",

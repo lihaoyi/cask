@@ -60,7 +60,7 @@ class CaskMainModule(val crossScalaVersion: String) extends CaskModule {
   def scalacPluginIvyDeps = T{ if (!isDotty) Agg(ivy"com.lihaoyi::acyclic:0.2.0") else Agg() }
 
   object test extends Tests{
-    def testFrameworks = Seq("utest.runner.Framework")
+    def testFramework = "utest.runner.Framework"
     def ivyDeps = Agg(
       ivy"com.lihaoyi::utest::0.7.10",
       ivy"com.lihaoyi::requests::0.6.9"

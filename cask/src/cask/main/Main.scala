@@ -46,10 +46,10 @@ abstract class Main{
 
   implicit def log: cask.util.Logger = new cask.util.Logger.Console()
 
-  def routeTries = Main.prepareRouteTries(allRoutes)
+  def dispatchTrie = Main.prepareDispatchTrie(allRoutes)
 
   def defaultHandler = new BlockingHandler(
-    new Main.DefaultHandler(routeTries, mainDecorators, debugMode, handleNotFound, handleMethodNotAllowed, handleEndpointError)
+    new Main.DefaultHandler(dispatchTrie, mainDecorators, debugMode, handleNotFound, handleMethodNotAllowed, handleEndpointError)
   )
 
   def handleNotFound() = Main.defaultHandleNotFound()
@@ -74,7 +74,7 @@ abstract class Main{
 }
 
 object Main{
-  class DefaultHandler(routeTries: Map[String, DispatchTrie[(Routes, EndpointMetadata[_])]],
+  class DefaultHandler(dispatchTrie: DispatchTrie[Map[String, (Routes, EndpointMetadata[_])]],
                        mainDecorators: Seq[Decorator[_, _, _]],
                        debugMode: Boolean,
                        handleNotFound: () => Response.Raw,
@@ -101,35 +101,30 @@ object Main{
         (r: Any) => Main.writeResponse(exchange, r.asInstanceOf[Response.Raw])
       )
 
-      val dispatchTrie: DispatchTrie[(Routes, EndpointMetadata[_])] = routeTries.get(effectiveMethod) match {
-        case None =>
-          Main.writeResponse(exchange, handleMethodNotAllowed())
-          return
-        case Some(trie) => trie
-      }
-
       dispatchTrie.lookup(Util.splitPath(exchange.getRequestPath).toList, Map()) match {
         case None => Main.writeResponse(exchange, handleNotFound())
-        case Some(((routes, metadata), routeBindings, remaining)) =>
-          Decorator.invoke(
-            Request(exchange, remaining),
-            metadata.endpoint,
-            metadata.entryPoint.asInstanceOf[EntryPoint[Routes, _]],
-            routes,
-            routeBindings,
-            (mainDecorators ++ routes.decorators ++ metadata.decorators).toList,
-            Nil
-          ) match{
-            case Result.Success(res) => runner(res)
-            case e: Result.Error =>
-              Main.writeResponse(
-                exchange,
-                handleError(routes, metadata, e)
-              )
-              None
+        case Some((methodMap, routeBindings, remaining)) =>
+          methodMap.get(effectiveMethod) match {
+            case None => Main.writeResponse(exchange, handleMethodNotAllowed())
+            case Some((routes, metadata)) =>
+              Decorator.invoke(
+                Request(exchange, remaining),
+                metadata.endpoint,
+                metadata.entryPoint.asInstanceOf[EntryPoint[Routes, _]],
+                routes,
+                routeBindings,
+                (mainDecorators ++ routes.decorators ++ metadata.decorators).toList,
+                Nil
+              ) match {
+                case Result.Success(res) => runner(res)
+                case e: Result.Error =>
+                  Main.writeResponse(
+                    exchange,
+                    handleError(routes, metadata, e)
+                  )
+              }
           }
       }
-      //        println("Completed Request: " + exchange.getRequestPath)
     }catch{case e: Throwable =>
       e.printStackTrace()
     }
@@ -149,23 +144,25 @@ object Main{
     )
   }
 
-  def prepareRouteTries(allRoutes: Seq[Routes]): Map[String, DispatchTrie[(Routes, EndpointMetadata[_])]] = {
-    val routeList = for{
+  def prepareDispatchTrie(allRoutes: Seq[Routes]): DispatchTrie[Map[String, (Routes, EndpointMetadata[_])]] = {
+    val flattenedRoutes = for {
       routes <- allRoutes
-      route <- routes.caskMetadata.value.map(x => x: EndpointMetadata[_])
-    } yield (routes, route)
+      metadata <- routes.caskMetadata.value
+    } yield {
+      val segments = Util.splitPath(metadata.endpoint.path)
+      val methodMap = metadata.endpoint.methods.map(_ -> (routes, metadata: EndpointMetadata[_])).toMap
+      (segments, methodMap, metadata.endpoint.subpath)
+    }
 
-    val allMethods: Set[String] =
-      routeList.flatMap(_._2.endpoint.methods).map(_.toLowerCase).toSet
+    val dispatchInputs = flattenedRoutes.groupBy(_._1).map { case (segments, values) =>
+      val methodMap = values.map(_._2).flatten.toMap
+      val hasSubpath = values.map(_._3).contains(true)
+      (segments, methodMap, hasSubpath)
+    }.toSeq
 
-    allMethods
-      .map { method =>
-        method -> DispatchTrie.construct[(Routes, EndpointMetadata[_])](0,
-          for ((route, metadata) <- routeList if metadata.endpoint.methods.contains(method))
-            yield (Util.splitPath(metadata.endpoint.path): collection.IndexedSeq[String], (route, metadata), metadata.endpoint.subpath)
-        )
-      }.toMap
+    DispatchTrie.construct(0, dispatchInputs)
   }
+
   def writeResponse(exchange: HttpServerExchange, response: Response.Raw) = {
     response.data.headers.foreach{case (k, v) =>
       exchange.getResponseHeaders.put(new HttpString(k), v)
